@@ -33,11 +33,26 @@ class _HomePageState extends State<HomePage> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _priceController = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _minPriceController = TextEditingController();
+  final TextEditingController _maxPriceController = TextEditingController();
   String _searchQuery = '';
+  double? _minPrice;
+  double? _maxPrice;
 
   final CollectionReference _products = FirebaseFirestore.instance.collection(
     'products',
   );
+
+  Stream<QuerySnapshot> _getProductStream() {
+    if (_minPrice != null && _maxPrice != null) {
+      return FirebaseFirestore.instance
+          .collection('products')
+          .where('price', isGreaterThanOrEqualTo: _minPrice)
+          .where('price', isLessThanOrEqualTo: _maxPrice)
+          .snapshots();
+    }
+    return _products.snapshots();
+  }
 
   List<QueryDocumentSnapshot> _filterProducts(
     List<QueryDocumentSnapshot> docs,
@@ -49,6 +64,28 @@ class _HomePageState extends State<HomePage> {
           (doc) => (doc['name'] as String).toLowerCase().contains(lowerQuery),
         )
         .toList();
+  }
+
+  void _applyPriceFilter() {
+    final minText = _minPriceController.text;
+    final maxText = _maxPriceController.text;
+    setState(() {
+      if (minText.isNotEmpty && maxText.isNotEmpty) {
+        _minPrice = double.tryParse(minText);
+        _maxPrice = double.tryParse(maxText);
+      }
+    });
+  }
+
+  void _resetFilters() {
+    setState(() {
+      _searchQuery = '';
+      _minPrice = null;
+      _maxPrice = null;
+      _searchController.clear();
+      _minPriceController.clear();
+      _maxPriceController.clear();
+    });
   }
 
   Future<void> _createOrUpdate([DocumentSnapshot? documentSnapshot]) async {
@@ -144,9 +181,52 @@ class _HomePageState extends State<HomePage> {
               },
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _minPriceController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      hintText: 'Min price',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: TextField(
+                    controller: _maxPriceController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      hintText: 'Max price',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                ElevatedButton(
+                  onPressed: _applyPriceFilter,
+                  child: const Text('Filter'),
+                ),
+                const SizedBox(width: 5),
+                IconButton(
+                  onPressed: _resetFilters,
+                  icon: const Icon(Icons.refresh),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
           Expanded(
             child: StreamBuilder(
-              stream: _products.snapshots(),
+              stream: _getProductStream(),
               builder: (context, AsyncSnapshot<QuerySnapshot> streamSnapshot) {
                 if (streamSnapshot.hasData) {
                   final filteredDocs = _filterProducts(
